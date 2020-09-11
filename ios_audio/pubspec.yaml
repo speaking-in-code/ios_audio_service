@@ -9,6 +9,9 @@ environment:
   sdk: ">=2.7.0 <3.0.0"
 
 dependencies:
+  audio_service: ^0.14.1
+  intl: ^0.16.1
+  just_audio: ^0.4.3
   flutter:
     sdk: flutter
 
@@ -18,3 +21,5 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
+  assets:
+    - assets/cowbell.mp3
