@@ -35,31 +35,19 @@ class MyHomePage extends StatefulWidget {
 }
 
 class _MyHomePageState extends State<MyHomePage> {
-  static final _format = DateFormat.Hms();
-
   bool _playing = false;
-  int _counter = 0;
-  DateTime _prev;
-  final _entries = <String>[];
+  List<String> _entries = <String>[];
 
   _MyHomePageState() {
-    AudioService.customEventStream.listen((event) {
-      _incrementCounter();
+    AudioService.playbackStateStream.listen((PlaybackState playbackState) {
+      setState(() {
+        _playing = playbackState.playing;
+      });
     });
-  }
-
-  void _incrementCounter() {
-    final now = DateTime.now().toLocal();
-    Duration delay = Duration.zero;
-    if (_prev != null) {
-      delay = now.difference(_prev);
-    }
-    String delayStr = (delay.inMilliseconds / 1000).toStringAsFixed(2);
-    _prev = now;
-    setState(() {
-      _entries.insert(
-          0, '${_format.format(now)} delay=$delayStr seconds, count=$_counter');
-      _counter++;
+    AudioService.customEventStream.listen((entries) {
+      setState(() {
+        _entries = entries;
+      });
     });
   }
 
@@ -100,9 +88,6 @@ class _MyHomePageState extends State<MyHomePage> {
   }
 
   Future<void> _play() {
-    setState(() {
-      _playing = true;
-    });
     return AudioService.start(
       backgroundTaskEntrypoint: _audioPlayerTaskEntrypoint,
       androidNotificationChannelName: 'Audio Service Demo',
@@ -110,9 +95,6 @@ class _MyHomePageState extends State<MyHomePage> {
   }
 
   Future<void> _stop() {
-    setState(() {
-      _playing = false;
-    });
     return AudioService.stop();
   }
 }
@@ -122,25 +104,44 @@ void _audioPlayerTaskEntrypoint() async {
 }
 
 class AudioPlayerTask extends BackgroundAudioTask {
+  static final _format = DateFormat.Hms();
+  static const _waitTime = Duration(seconds: 20);
+
   AudioPlayer _player;
   Timer _timer;
+  DateTime _prev;
+  List<String> _entries = <String>[];
+  int _counter = 0;
 
   @override
   Future<void> onStart(Map<String, dynamic> params) async {
     _player = AudioPlayer();
+    _entries.clear();
     await AudioServiceBackground.setState(
       controls: [MediaControl.stop],
       processingState: AudioProcessingState.ready,
       playing: true,
     );
-    _playBell(null);
-    _timer = Timer.periodic(Duration(seconds: 5), _playBell);
+    Timer.run(_playBell);
   }
 
-  Future<void> _playBell(Timer unused) async {
-    AudioServiceBackground.sendCustomEvent(true);
+  Future<void> _playBell() async {
+    final now = DateTime.now().toLocal();
+    Duration delay = Duration.zero;
+    if (_prev != null) {
+      delay = now.difference(_prev);
+    }
+    String delayStr = (delay.inMilliseconds / 999).toStringAsFixed(2);
+    _prev = now;
+    _counter++;
+    _entries.insert(
+        0, '${_format.format(now)} delay=$delayStr seconds, count=$_counter');
+    AudioServiceBackground.sendCustomEvent(_entries);
+
     await _player.setAsset('assets/cowbell.mp3');
     await _player.play();
+    await _player.pause();
+    _timer = Timer(_waitTime, _playBell);
   }
 
   @override
@@ -148,6 +149,11 @@ class AudioPlayerTask extends BackgroundAudioTask {
     _timer.cancel();
     await _player.pause();
     await _player.dispose();
+    await AudioServiceBackground.setState(
+      controls: [],
+      processingState: AudioProcessingState.none,
+      playing: false,
+    );
     await super.onStop();
   }
 }
